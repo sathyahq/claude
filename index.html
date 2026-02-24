@@ -74,7 +74,7 @@ body {
 /* ── SVG lines ── */
 #lines-svg {
   position: absolute; top: 0; left: 0; pointer-events: none;
-  overflow: visible;
+  overflow: visible; width: 10000px; height: 10000px;
 }
 
 /* ── Nodes ── */
@@ -84,7 +84,6 @@ body {
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 13px;
-  max-width: 280px;
   min-width: 120px;
   display: flex;
   align-items: center;
@@ -92,8 +91,6 @@ body {
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(0,0,0,0.06);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   height: 36px;
 }
 .node-card .icon { flex-shrink: 0; font-size: 14px; line-height: 1; }
@@ -127,8 +124,13 @@ body {
 
 /* Editing state */
 .node-card .edit-input {
-  flex: 1; border: none; outline: none; font-size: 13px; font-family: inherit;
-  background: transparent; color: #1F2937; padding: 0; min-width: 80px;
+  flex: 1; border: 1px solid #D1D5DB; outline: none; font-size: 13px; font-family: inherit;
+  background: #F9FAFB; color: #1F2937; padding: 2px 6px; min-width: 160px;
+  border-radius: 3px;
+}
+.node-card .edit-input:focus {
+  border-color: #3B82F6; background: #fff;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
 }
 
 /* ── Picker ── */
@@ -340,12 +342,12 @@ body {
       for (const child of visChildren) {
         const cpos = layoutMap[child.id];
         if (!cpos) continue;
-        const x1 = pos.x + 160;
+        const x1 = pos.x + LEVEL_SPACING - 30;
         const y1 = pos.y + NODE_HEIGHT / 2;
         const x2 = cpos.x;
         const y2 = cpos.y + NODE_HEIGHT / 2;
         const mx = (x1 + x2) / 2;
-        svgContent += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="#D1D5DB" stroke-width="1.5"/>`;
+        svgContent += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="#9CA3AF" stroke-width="2"/>`;
       }
 
       // Collapse toggle
@@ -374,7 +376,7 @@ body {
       </div>`;
     }
 
-    canvasInner.innerHTML = `<svg id="lines-svg" xmlns="http://www.w3.org/2000/svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;">${svgContent}</svg>${html}`;
+    canvasInner.innerHTML = `<svg id="lines-svg" xmlns="http://www.w3.org/2000/svg" style="position:absolute;top:0;left:0;width:10000px;height:10000px;pointer-events:none;overflow:visible;">${svgContent}</svg>${html}`;
 
     applyTransform();
 
