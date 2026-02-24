@@ -4,37 +4,24 @@ This file provides guidance for AI assistants working with this repository.
 
 ## Repository Overview
 
-This is a new repository in early setup. Update this section as the project takes shape.
+A personal thinking tool for creating IBIS (Issue-Based Information System) dialogue maps in the browser. Single HTML file, inline CSS/JS, zero dependencies. Open `index.html` in Chrome and it works.
 
 ## Project Structure
 
 ```
 .
 ├── CLAUDE.md          # AI assistant guidance (this file)
+├── index.html         # Complete dialogue mapping tool (single file)
 ```
-
-> **Note:** This project is in its initial phase. Update this structure map as directories and files are added.
 
 ## Development Setup
 
-<!-- Update with actual setup steps as the project is configured -->
-
 1. Clone the repository
-2. Install dependencies (update with actual package manager and commands)
-3. Copy environment template if applicable (e.g., `cp .env.example .env`)
+2. Open `index.html` in a browser (no build step or dependencies needed)
 
 ## Build & Run Commands
 
-<!-- Replace these placeholders with actual commands as they are established -->
-
-| Task       | Command            |
-|------------|--------------------|
-| Install    | *TBD*              |
-| Build      | *TBD*              |
-| Test       | *TBD*              |
-| Lint       | *TBD*              |
-| Format     | *TBD*              |
-| Dev server | *TBD*              |
+No build tools. Open `index.html` directly in a browser. Data persists in localStorage.
 
 ## Code Conventions
 

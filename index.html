@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dialogue Map</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #F3F4F6;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+/* ── Header ── */
+#header {
+  background: #fff;
+  border-bottom: 1px solid #E5E7EB;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  z-index: 100;
+}
+#header .app-name { font-weight: 600; font-size: 15px; color: #1F2937; }
+#header .legend { display: flex; gap: 14px; font-size: 12px; color: #6B7280; }
+#header .legend span { display: flex; align-items: center; gap: 3px; }
+#header .actions { display: flex; gap: 6px; }
+#header .actions button {
+  background: #F9FAFB; border: 1px solid #D1D5DB; border-radius: 4px;
+  padding: 4px 10px; font-size: 12px; color: #374151; cursor: pointer;
+}
+#header .actions button:hover { background: #E5E7EB; }
+
+#hints {
+  background: #FAFAFA; border-bottom: 1px solid #E5E7EB;
+  padding: 4px 16px; font-size: 11px; color: #9CA3AF; text-align: center;
+  flex-shrink: 0; z-index: 100;
+}
+#hints kbd {
+  background: #E5E7EB; border-radius: 3px; padding: 1px 4px;
+  font-family: inherit; font-size: 10px; color: #6B7280;
+}
+
+/* ── Start screen ── */
+#start-screen {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; z-index: 50;
+  background: #F3F4F6;
+}
+#start-screen .icon { font-size: 64px; margin-bottom: 16px; }
+#start-screen .prompt { font-size: 18px; color: #374151; margin-bottom: 16px; }
+#start-screen input {
+  width: 360px; padding: 10px 14px; font-size: 15px; border: 2px solid #3B82F6;
+  border-radius: 8px; outline: none;
+}
+#start-screen input:focus { box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+
+/* ── Canvas ── */
+#canvas {
+  flex: 1; position: relative; overflow: hidden; cursor: grab;
+}
+#canvas.panning { cursor: grabbing; }
+#canvas-inner {
+  position: absolute; top: 0; left: 0; transform-origin: 0 0;
+}
+
+/* ── SVG lines ── */
+#lines-svg {
+  position: absolute; top: 0; left: 0; pointer-events: none;
+  overflow: visible;
+}
+
+/* ── Nodes ── */
+.node-card {
+  position: absolute;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  max-width: 280px;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 36px;
+}
+.node-card .icon { flex-shrink: 0; font-size: 14px; line-height: 1; }
+.node-card .label {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; color: #1F2937;
+  line-height: 1.3;
+}
+.node-card .collapse-toggle {
+  flex-shrink: 0; font-size: 10px; color: #9CA3AF; cursor: pointer;
+  padding: 2px 4px; border-radius: 3px; display: flex; align-items: center; gap: 2px;
+}
+.node-card .collapse-toggle:hover { background: #F3F4F6; }
+.node-card .add-btn {
+  flex-shrink: 0; font-size: 14px; color: #9CA3AF; cursor: pointer;
+  padding: 0 2px; border-radius: 3px; display: none; line-height: 1;
+}
+.node-card:hover .add-btn { display: block; }
+.node-card .add-btn:hover { color: #6B7280; background: #F3F4F6; }
+
+/* Node type borders */
+.node-card[data-type="question"] { border-left: 4px solid #3B82F6; }
+.node-card[data-type="idea"]     { border-left: 4px solid #D97706; }
+.node-card[data-type="pro"]      { border-left: 4px solid #16A34A; }
+.node-card[data-type="con"]      { border-left: 4px solid #DC2626; }
+
+/* Selected state */
+.node-card.selected[data-type="question"] { outline: 2px solid #3B82F6; outline-offset: 0; }
+.node-card.selected[data-type="idea"]     { outline: 2px solid #D97706; outline-offset: 0; }
+.node-card.selected[data-type="pro"]      { outline: 2px solid #16A34A; outline-offset: 0; }
+.node-card.selected[data-type="con"]      { outline: 2px solid #DC2626; outline-offset: 0; }
+
+/* Editing state */
+.node-card .edit-input {
+  flex: 1; border: none; outline: none; font-size: 13px; font-family: inherit;
+  background: transparent; color: #1F2937; padding: 0; min-width: 80px;
+}
+
+/* ── Picker ── */
+#type-picker {
+  position: absolute; z-index: 200; display: none;
+  background: #fff; border: 1px solid #D1D5DB; border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12); padding: 4px;
+  display: none; gap: 4px;
+}
+#type-picker button {
+  border: none; background: #F9FAFB; border-radius: 4px;
+  padding: 4px 10px; font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+#type-picker button:hover { background: #E5E7EB; }
+
+/* ── Hidden file input ── */
+#import-input { display: none; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="app-name">🗺️ Dialogue Map</div>
+  <div class="legend">
+    <span>❓ Question</span>
+    <span>💡 Idea</span>
+    <span>✅ Pro</span>
+    <span>❌ Con</span>
+  </div>
+  <div class="actions">
+    <button id="btn-new">New</button>
+    <button id="btn-import">Import</button>
+    <button id="btn-export">Export</button>
+  </div>
+</div>
+<div id="hints">
+  <kbd>Tab</kbd> add child &nbsp; <kbd>Enter</kbd> add sibling &nbsp;
+  <kbd>Space</kbd> collapse &nbsp; <kbd>←↑↓→</kbd> navigate &nbsp;
+  <kbd>F2</kbd> edit &nbsp; <kbd>Delete</kbd> remove
+</div>
+
+<div id="start-screen">
+  <div class="icon">❓</div>
+  <div class="prompt">What's your question?</div>
+  <input id="start-input" type="text" placeholder="Type your root question and press Enter…" autofocus>
+</div>
+
+<div id="canvas">
+  <div id="canvas-inner">
+    <svg id="lines-svg"></svg>
+  </div>
+</div>
+
+<div id="type-picker"></div>
+<input type="file" id="import-input" accept=".json">
+
+<script>
+(function() {
+  // ── Constants ──
+  const NODE_HEIGHT = 36;
+  const NODE_GAP = 8;
+  const LEVEL_SPACING = 200;
+  const PADDING_LEFT = 40;
+  const PADDING_TOP = 40;
+  const ICONS = { question: '❓', idea: '💡', pro: '✅', con: '❌' };
+  const COLORS = { question: '#3B82F6', idea: '#D97706', pro: '#16A34A', con: '#DC2626' };
+  const STORAGE_KEY = 'dialogue-map-data';
+
+  // IBIS grammar: parent type → valid child types
+  const GRAMMAR = {
+    question: ['idea', 'question'],
+    idea: ['pro', 'con', 'question'],
+    pro: ['question'],
+    con: ['question']
+  };
+
+  // ── State ──
+  let nodes = [];
+  let selectedId = null;
+  let editingId = null;
+  let layoutMap = {};  // id → {x, y, width, height}
+
+  // Pan/Zoom state
+  let panX = 0, panY = 0, zoom = 1;
+  let isPanning = false, panStartX = 0, panStartY = 0, panStartPanX = 0, panStartPanY = 0;
+
+  // DOM refs
+  const startScreen = document.getElementById('start-screen');
+  const startInput = document.getElementById('start-input');
+  const canvas = document.getElementById('canvas');
+  const canvasInner = document.getElementById('canvas-inner');
+  const linesSvg = document.getElementById('lines-svg');
+  const typePicker = document.getElementById('type-picker');
+  const importInput = document.getElementById('import-input');
+
+  // ── UUID ──
+  function uuid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  // ── Data helpers ──
+  function getNode(id) { return nodes.find(n => n.id === id); }
+  function getChildren(id) { return nodes.filter(n => n.parentId === id); }
+  function getVisibleChildren(id) {
+    const node = getNode(id);
+    if (node && node.collapsed) return [];
+    return getChildren(id);
+  }
+  function getRoot() { return nodes.find(n => n.parentId === null); }
+  function getSiblings(id) {
+    const node = getNode(id);
+    if (!node || !node.parentId) return [];
+    return getChildren(node.parentId);
+  }
+  function getDescendantIds(id) {
+    const ids = [];
+    const children = getChildren(id);
+    for (const child of children) {
+      ids.push(child.id);
+      ids.push(...getDescendantIds(child.id));
+    }
+    return ids;
+  }
+
+  // ── Persistence ──
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes)); } catch(e) {}
+  }
+  function loadFromStorage() {
+    try {
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          nodes = parsed;
+          return true;
+        }
+      }
+    } catch(e) {}
+    return false;
+  }
+
+  // ── Layout ──
+  function computeSubtreeHeight(id) {
+    const children = getVisibleChildren(id);
+    if (children.length === 0) return NODE_HEIGHT;
+    let total = 0;
+    for (let i = 0; i < children.length; i++) {
+      if (i > 0) total += NODE_GAP;
+      total += computeSubtreeHeight(children[i].id);
+    }
+    return total;
+  }
+
+  function layoutTree(id, x, y) {
+    const children = getVisibleChildren(id);
+    const subtreeH = computeSubtreeHeight(id);
+    const nodeY = y + subtreeH / 2 - NODE_HEIGHT / 2;
+
+    layoutMap[id] = { x: x, y: nodeY, width: 0, height: NODE_HEIGHT };
+
+    if (children.length > 0) {
+      let childY = y;
+      for (let i = 0; i < children.length; i++) {
+        const childH = computeSubtreeHeight(children[i].id);
+        layoutTree(children[i].id, x + LEVEL_SPACING, childY);
+        childY += childH + NODE_GAP;
+      }
+    }
+  }
+
+  // ── Render ──
+  function render() {
+    const root = getRoot();
+    if (!root) {
+      startScreen.style.display = 'flex';
+      canvas.style.display = 'none';
+      canvasInner.innerHTML = '<svg id="lines-svg"></svg>';
+      return;
+    }
+
+    startScreen.style.display = 'none';
+    canvas.style.display = 'block';
+
+    // Layout
+    layoutMap = {};
+    layoutTree(root.id, PADDING_LEFT, PADDING_TOP);
+
+    // Clear and rebuild
+    const svgNS = 'http://www.w3.org/2000/svg';
+    let html = '';
+    let svgContent = '';
+
+    for (const node of nodes) {
+      const pos = layoutMap[node.id];
+      if (!pos) continue; // collapsed descendant
+
+      const isSelected = node.id === selectedId;
+      const isEditing = node.id === editingId;
+      const children = getChildren(node.id);
+      const hasChildren = children.length > 0;
+
+      // Draw connecting lines to visible children
+      const visChildren = getVisibleChildren(node.id);
+      for (const child of visChildren) {
+        const cpos = layoutMap[child.id];
+        if (!cpos) continue;
+        const x1 = pos.x + 160;
+        const y1 = pos.y + NODE_HEIGHT / 2;
+        const x2 = cpos.x;
+        const y2 = cpos.y + NODE_HEIGHT / 2;
+        const mx = (x1 + x2) / 2;
+        svgContent += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="#D1D5DB" stroke-width="1.5"/>`;
+      }
+
+      // Collapse toggle
+      let collapseHtml = '';
+      if (hasChildren) {
+        if (node.collapsed) {
+          collapseHtml = `<span class="collapse-toggle" data-action="toggle" data-id="${node.id}">▶ ${children.length}</span>`;
+        } else {
+          collapseHtml = `<span class="collapse-toggle" data-action="toggle" data-id="${node.id}">▼</span>`;
+        }
+      }
+
+      // Node content
+      let contentHtml;
+      if (isEditing) {
+        contentHtml = `<input class="edit-input" data-id="${node.id}" value="${escapeAttr(node.text)}" />`;
+      } else {
+        contentHtml = `<span class="label">${escapeHtml(node.text)}</span>`;
+      }
+
+      html += `<div class="node-card ${isSelected ? 'selected' : ''}" data-type="${node.type}" data-id="${node.id}" style="left:${pos.x}px;top:${pos.y}px;">
+        <span class="icon">${ICONS[node.type]}</span>
+        ${contentHtml}
+        ${collapseHtml}
+        <span class="add-btn" data-action="add-child" data-id="${node.id}">+</span>
+      </div>`;
+    }
+
+    canvasInner.innerHTML = `<svg id="lines-svg" xmlns="http://www.w3.org/2000/svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;">${svgContent}</svg>${html}`;
+
+    applyTransform();
+
+    // Focus editing input
+    if (editingId) {
+      const input = canvasInner.querySelector(`.edit-input[data-id="${editingId}"]`);
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+  }
+
+  function applyTransform() {
+    canvasInner.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function escapeAttr(s) {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // ── Node actions ──
+  function createNode(type, text, parentId) {
+    const node = { id: uuid(), type: type, text: text, parentId: parentId, collapsed: false };
+    nodes.push(node);
+    save();
+    return node;
+  }
+
+  function deleteNode(id) {
+    const descendants = getDescendantIds(id);
+    const toRemove = new Set([id, ...descendants]);
+    nodes = nodes.filter(n => !toRemove.has(n.id));
+    save();
+  }
+
+  function selectNode(id) {
+    selectedId = id;
+    hidePicker();
+    render();
+  }
+
+  function startEditing(id) {
+    editingId = id;
+    render();
+  }
+
+  function finishEditing(confirm) {
+    if (!editingId) return;
+    if (confirm) {
+      const input = canvasInner.querySelector(`.edit-input[data-id="${editingId}"]`);
+      if (input && input.value.trim()) {
+        const node = getNode(editingId);
+        if (node) {
+          node.text = input.value.trim();
+          save();
+        }
+      }
+    }
+    editingId = null;
+    render();
+  }
+
+  // ── Type picker ──
+  let pickerTargetId = null;
+
+  function showPicker(nodeId) {
+    const node = getNode(nodeId);
+    if (!node) return;
+
+    const validTypes = GRAMMAR[node.type];
+    if (!validTypes || validTypes.length === 0) return;
+
+    // If only one valid type, skip picker and create directly
+    if (validTypes.length === 1) {
+      const newNode = createNode(validTypes[0], '', nodeId);
+      // Expand parent if collapsed
+      if (node.collapsed) { node.collapsed = false; save(); }
+      selectedId = newNode.id;
+      editingId = newNode.id;
+      render();
+      return;
+    }
+
+    pickerTargetId = nodeId;
+
+    let btns = '';
+    for (const t of validTypes) {
+      btns += `<button data-pick-type="${t}">${ICONS[t]} ${t.charAt(0).toUpperCase() + t.slice(1)}</button>`;
+    }
+    typePicker.innerHTML = btns;
+    typePicker.style.display = 'flex';
+
+    // Position near the node
+    const pos = layoutMap[nodeId];
+    if (pos) {
+      const rect = canvas.getBoundingClientRect();
+      const px = (pos.x + 170) * zoom + panX + rect.left;
+      const py = (pos.y) * zoom + panY + rect.top;
+      typePicker.style.left = px + 'px';
+      typePicker.style.top = py + 'px';
+    }
+  }
+
+  function hidePicker() {
+    typePicker.style.display = 'none';
+    pickerTargetId = null;
+  }
+
+  // ── Pan & Zoom ──
+  canvas.addEventListener('pointerdown', function(e) {
+    // Only start pan on empty area or with middle button
+    if (e.target === canvas || e.target === canvasInner || e.target.tagName === 'svg' || e.target.tagName === 'path') {
+      isPanning = true;
+      panStartX = e.clientX;
+      panStartY = e.clientY;
+      panStartPanX = panX;
+      panStartPanY = panY;
+      canvas.classList.add('panning');
+      canvas.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    }
+  });
+
+  canvas.addEventListener('pointermove', function(e) {
+    if (!isPanning) return;
+    panX = panStartPanX + (e.clientX - panStartX);
+    panY = panStartPanY + (e.clientY - panStartY);
+    applyTransform();
+  });
+
+  canvas.addEventListener('pointerup', function(e) {
+    if (isPanning) {
+      isPanning = false;
+      canvas.classList.remove('panning');
+    }
+  });
+
+  canvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const oldZoom = zoom;
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    zoom = Math.max(0.2, Math.min(3, zoom * delta));
+
+    // Adjust pan so zoom is centered on cursor
+    panX = mx - (mx - panX) * (zoom / oldZoom);
+    panY = my - (my - panY) * (zoom / oldZoom);
+
+    applyTransform();
+  }, { passive: false });
+
+  // ── Click handling ──
+  canvasInner.addEventListener('pointerdown', function(e) {
+    const card = e.target.closest('.node-card');
+    if (!card) return;
+
+    // Stop pan from starting
+    e.stopPropagation();
+
+    const nodeId = card.dataset.id;
+
+    // Check if click is on collapse toggle
+    if (e.target.closest('[data-action="toggle"]')) {
+      const node = getNode(nodeId);
+      if (node) {
+        node.collapsed = !node.collapsed;
+        save();
+        render();
+      }
+      return;
+    }
+
+    // Check if click is on add-child button
+    if (e.target.closest('[data-action="add-child"]')) {
+      selectedId = nodeId;
+      showPicker(nodeId);
+      render();
+      return;
+    }
+
+    // Don't interfere with editing
+    if (e.target.classList.contains('edit-input')) return;
+
+    // Select node
+    if (editingId && editingId !== nodeId) {
+      finishEditing(true);
+    }
+    selectNode(nodeId);
+  });
+
+  // Double-click to edit
+  canvasInner.addEventListener('dblclick', function(e) {
+    const card = e.target.closest('.node-card');
+    if (!card) return;
+    e.stopPropagation();
+    const nodeId = card.dataset.id;
+    selectedId = nodeId;
+    startEditing(nodeId);
+  });
+
+  // ── Edit input handling ──
+  canvasInner.addEventListener('keydown', function(e) {
+    if (e.target.classList.contains('edit-input')) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finishEditing(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        const node = getNode(editingId);
+        // If this is a new node with empty text, delete it
+        if (node && node.text === '') {
+          const parentId = node.parentId;
+          deleteNode(node.id);
+          selectedId = parentId;
+          editingId = null;
+          render();
+        } else {
+          finishEditing(false);
+        }
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        finishEditing(true);
+      }
+    }
+  });
+
+  // ── Type picker click ──
+  typePicker.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-pick-type]');
+    if (!btn || !pickerTargetId) return;
+
+    const type = btn.dataset.pickType;
+    const parent = getNode(pickerTargetId);
+    if (!parent) { hidePicker(); return; }
+
+    // Expand parent if collapsed
+    if (parent.collapsed) { parent.collapsed = false; save(); }
+
+    const newNode = createNode(type, '', pickerTargetId);
+    selectedId = newNode.id;
+    editingId = newNode.id;
+    hidePicker();
+    render();
+  });
+
+  // ── Keyboard shortcuts (global) ──
+  document.addEventListener('keydown', function(e) {
+    // Ignore if editing text (edit inputs or start screen input)
+    if (editingId) return;
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
+
+    // Ignore if picker is open and we press escape
+    if (e.key === 'Escape') {
+      if (typePicker.style.display === 'flex') {
+        hidePicker();
+        e.preventDefault();
+        return;
+      }
+      if (selectedId) {
+        selectedId = null;
+        render();
+        e.preventDefault();
+        return;
+      }
+      return;
+    }
+
+    if (!selectedId) return;
+    const node = getNode(selectedId);
+    if (!node) return;
+
+    switch (e.key) {
+      case 'Tab': {
+        e.preventDefault();
+        showPicker(selectedId);
+        break;
+      }
+      case 'Enter': {
+        e.preventDefault();
+        if (!node.parentId) return; // root — do nothing
+        const parent = getNode(node.parentId);
+        if (!parent) return;
+        const newNode = createNode(node.type, '', node.parentId);
+        // Reorder: insert the new node right after the selected one
+        nodes.splice(nodes.indexOf(newNode), 1);
+        const selectedIdx = nodes.indexOf(node);
+        // Insert after all descendants of selected node
+        const descIds = new Set(getDescendantIds(node.id));
+        let insertIdx = selectedIdx + 1;
+        while (insertIdx < nodes.length && descIds.has(nodes[insertIdx].id)) insertIdx++;
+        nodes.splice(insertIdx, 0, newNode);
+        selectedId = newNode.id;
+        editingId = newNode.id;
+        save();
+        render();
+        break;
+      }
+      case 'F2': {
+        e.preventDefault();
+        startEditing(selectedId);
+        break;
+      }
+      case 'Delete': {
+        e.preventDefault();
+        const children = getChildren(node.id);
+        const descCount = getDescendantIds(node.id).length;
+        if (descCount > 0) {
+          if (!confirm(`Delete this node and its ${descCount} descendant${descCount > 1 ? 's' : ''}?`)) return;
+        }
+        const parentId = node.parentId;
+        deleteNode(node.id);
+        selectedId = parentId;
+        if (!getRoot()) { selectedId = null; }
+        save();
+        render();
+        break;
+      }
+      case ' ': {
+        e.preventDefault();
+        const ch = getChildren(node.id);
+        if (ch.length > 0) {
+          node.collapsed = !node.collapsed;
+          save();
+          render();
+        }
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        const siblings = getSiblings(selectedId);
+        if (siblings.length === 0) return;
+        const idx = siblings.findIndex(s => s.id === selectedId);
+        if (idx > 0) selectNode(siblings[idx - 1].id);
+        break;
+      }
+      case 'ArrowDown': {
+        e.preventDefault();
+        const siblings2 = getSiblings(selectedId);
+        if (siblings2.length === 0) return;
+        const idx2 = siblings2.findIndex(s => s.id === selectedId);
+        if (idx2 < siblings2.length - 1) selectNode(siblings2[idx2 + 1].id);
+        break;
+      }
+      case 'ArrowLeft': {
+        e.preventDefault();
+        if (node.parentId) selectNode(node.parentId);
+        break;
+      }
+      case 'ArrowRight': {
+        e.preventDefault();
+        const vc = getVisibleChildren(selectedId);
+        if (vc.length > 0) selectNode(vc[0].id);
+        break;
+      }
+    }
+  });
+
+  // ── Start screen ──
+  startInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      const text = startInput.value.trim();
+      if (!text) return;
+      e.preventDefault();
+      nodes = [];
+      const root = createNode('question', text, null);
+      selectedId = root.id;
+      startInput.value = '';
+      render();
+    }
+  });
+
+  // ── Header buttons ──
+  document.getElementById('btn-new').addEventListener('click', function() {
+    if (nodes.length > 0 && !confirm('Clear current map and start fresh?')) return;
+    nodes = [];
+    selectedId = null;
+    editingId = null;
+    hidePicker();
+    save();
+    render();
+    startInput.value = '';
+    setTimeout(function() { startInput.focus(); }, 50);
+  });
+
+  document.getElementById('btn-export').addEventListener('click', function() {
+    if (nodes.length === 0) { alert('Nothing to export.'); return; }
+    const blob = new Blob([JSON.stringify(nodes, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'dialogue-map.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('btn-import').addEventListener('click', function() {
+    importInput.click();
+  });
+
+  importInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!Array.isArray(data)) throw new Error('Invalid format');
+        nodes = data;
+        selectedId = null;
+        editingId = null;
+        hidePicker();
+        save();
+        render();
+        // Reset pan/zoom
+        panX = 0; panY = 0; zoom = 1;
+        applyTransform();
+      } catch(err) {
+        alert('Invalid JSON file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    importInput.value = '';
+  });
+
+  // ── Click on empty canvas to deselect ──
+  canvas.addEventListener('click', function(e) {
+    if (e.target === canvas || e.target.tagName === 'svg') {
+      if (editingId) finishEditing(true);
+      selectedId = null;
+      hidePicker();
+      render();
+    }
+  });
+
+  // ── Initialize ──
+  if (loadFromStorage()) {
+    startScreen.style.display = 'none';
+    canvas.style.display = 'block';
+    render();
+  } else {
+    startScreen.style.display = 'flex';
+    canvas.style.display = 'none';
+    startInput.focus();
+  }
+})();
+</script>
+</body>
+</html>
