@@ -85,6 +85,7 @@ body {
   padding: 6px 10px;
   font-size: 13px;
   min-width: 120px;
+  max-width: 180px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -165,12 +166,13 @@ body {
     <button id="btn-new">New</button>
     <button id="btn-import">Import</button>
     <button id="btn-export">Export</button>
+    <button id="btn-export-image">Save Image</button>
   </div>
 </div>
 <div id="hints">
   <kbd>Tab</kbd> add child &nbsp; <kbd>Enter</kbd> add sibling &nbsp;
-  <kbd>Space</kbd> collapse &nbsp; <kbd>←↑↓→</kbd> navigate &nbsp;
-  <kbd>F2</kbd> edit &nbsp; <kbd>Delete</kbd> remove
+  <kbd>Space</kbd> edit &nbsp; <kbd>←→</kbd> fold / navigate &nbsp;
+  <kbd>↑↓</kbd> siblings &nbsp; <kbd>Delete</kbd> remove
 </div>
 
 <div id="start-screen">
@@ -703,12 +705,7 @@ body {
       }
       case ' ': {
         e.preventDefault();
-        const ch = getChildren(node.id);
-        if (ch.length > 0) {
-          node.collapsed = !node.collapsed;
-          save();
-          render();
-        }
+        startEditing(selectedId);
         break;
       }
       case 'ArrowUp': {
@@ -729,13 +726,27 @@ body {
       }
       case 'ArrowLeft': {
         e.preventDefault();
-        if (node.parentId) selectNode(node.parentId);
+        // Collapse first, then navigate to parent (tree-style)
+        if (getChildren(node.id).length > 0 && !node.collapsed) {
+          node.collapsed = true;
+          save();
+          render();
+        } else if (node.parentId) {
+          selectNode(node.parentId);
+        }
         break;
       }
       case 'ArrowRight': {
         e.preventDefault();
-        const vc = getVisibleChildren(selectedId);
-        if (vc.length > 0) selectNode(vc[0].id);
+        // Expand first, then navigate to first child (tree-style)
+        if (node.collapsed) {
+          node.collapsed = false;
+          save();
+          render();
+        } else {
+          const vc = getVisibleChildren(selectedId);
+          if (vc.length > 0) selectNode(vc[0].id);
+        }
         break;
       }
     }
@@ -777,6 +788,139 @@ body {
     a.download = 'dialogue-map.json';
     a.click();
     URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('btn-export-image').addEventListener('click', function() {
+    if (nodes.length === 0) { alert('Nothing to export.'); return; }
+    const root = getRoot();
+    if (!root) return;
+
+    // Ensure layout is fresh
+    layoutMap = {};
+    layoutTree(root.id, PADDING_LEFT, PADDING_TOP);
+
+    // Measure text widths for accurate card sizing
+    const measure = document.createElement('canvas').getContext('2d');
+    const bodyFont = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    measure.font = bodyFont;
+
+    const nodeWidths = {};
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    for (const node of nodes) {
+      const pos = layoutMap[node.id];
+      if (!pos) continue;
+      const tw = measure.measureText(node.text).width;
+      // 4(border) + 10(padL) + 14(icon) + 6(gap) + text + 10(padR)
+      const w = Math.min(Math.max(120, tw + 44), 180);
+      nodeWidths[node.id] = w;
+      minX = Math.min(minX, pos.x);
+      minY = Math.min(minY, pos.y);
+      maxX = Math.max(maxX, pos.x + w);
+      maxY = Math.max(maxY, pos.y + NODE_HEIGHT);
+    }
+
+    const pad = 40;
+    const W = maxX - minX + pad * 2;
+    const H = maxY - minY + pad * 2;
+    const ox = -minX + pad;
+    const oy = -minY + pad;
+
+    const cvs = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 2;
+    cvs.width = W * dpr;
+    cvs.height = H * dpr;
+    const ctx = cvs.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Background
+    ctx.fillStyle = '#F3F4F6';
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw connecting lines
+    ctx.strokeStyle = '#9CA3AF';
+    ctx.lineWidth = 1.5;
+    for (const nd of nodes) {
+      const pos = layoutMap[nd.id];
+      if (!pos) continue;
+      const vc = getVisibleChildren(nd.id);
+      for (const child of vc) {
+        const cp = layoutMap[child.id];
+        if (!cp) continue;
+        const x1 = pos.x + ox + LEVEL_SPACING - 30;
+        const y1 = pos.y + oy + NODE_HEIGHT / 2;
+        const x2 = cp.x + ox;
+        const y2 = cp.y + oy + NODE_HEIGHT / 2;
+        const mx = (x1 + x2) / 2;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.bezierCurveTo(mx, y1, mx, y2, x2, y2);
+        ctx.stroke();
+      }
+    }
+
+    // Draw node cards
+    ctx.textBaseline = 'middle';
+    for (const nd of nodes) {
+      const pos = layoutMap[nd.id];
+      if (!pos) continue;
+      const x = pos.x + ox;
+      const y = pos.y + oy;
+      const w = nodeWidths[nd.id];
+      const h = NODE_HEIGHT;
+
+      // Shadow + card background
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.08)';
+      ctx.shadowBlur = 3;
+      ctx.shadowOffsetY = 1;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 6);
+      ctx.fill();
+      ctx.restore();
+
+      // Left colored border (clipped to card shape)
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 6);
+      ctx.clip();
+      ctx.fillStyle = COLORS[nd.type];
+      ctx.fillRect(x, y, 4, h);
+      ctx.restore();
+
+      // Icon
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillStyle = '#000';
+      ctx.fillText(ICONS[nd.type], x + 10, y + h / 2);
+
+      // Label (clipped to card)
+      ctx.font = bodyFont;
+      ctx.fillStyle = '#1F2937';
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x + 30, y, w - 40, h);
+      ctx.clip();
+      ctx.fillText(nd.text, x + 30, y + h / 2);
+      ctx.restore();
+
+      // Collapse indicator
+      if (nd.collapsed && getChildren(nd.id).length > 0) {
+        const count = getChildren(nd.id).length;
+        ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillStyle = '#9CA3AF';
+        ctx.fillText('\u25B6 ' + count, x + w + 4, y + h / 2);
+      }
+    }
+
+    cvs.toBlob(function(blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'dialogue-map.png';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
   });
 
   document.getElementById('btn-import').addEventListener('click', function() {
