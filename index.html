@@ -567,6 +567,14 @@ body {
     // Don't interfere with editing
     if (e.target.classList.contains('edit-input')) return;
 
+    // Click on label text → select + edit
+    if (e.target.classList.contains('label')) {
+      if (editingId && editingId !== nodeId) finishEditing(true);
+      selectedId = nodeId;
+      startEditing(nodeId);
+      return;
+    }
+
     // Select node
     if (editingId && editingId !== nodeId) {
       finishEditing(true);
