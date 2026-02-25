@@ -172,7 +172,7 @@ body {
 <div id="hints">
   <kbd>Tab</kbd> add child &nbsp; <kbd>Enter</kbd> add sibling &nbsp;
   <kbd>Space</kbd> edit &nbsp; <kbd>←→</kbd> fold / navigate &nbsp;
-  <kbd>↑↓</kbd> siblings &nbsp; <kbd>Delete</kbd> remove
+  <kbd>↑↓</kbd> siblings &nbsp; <kbd>Ctrl+↑↓</kbd> reorder &nbsp; <kbd>Delete</kbd> remove
 </div>
 
 <div id="start-screen">
@@ -438,6 +438,38 @@ body {
     const toRemove = new Set([id, ...descendants]);
     nodes = nodes.filter(n => !toRemove.has(n.id));
     save();
+  }
+
+  // Move a node (and its descendants) before or after an adjacent sibling in the nodes array
+  function moveNodeAmongSiblings(id, direction) {
+    const node = getNode(id);
+    if (!node || !node.parentId) return false;
+
+    const siblings = getChildren(node.parentId);
+    const sibIdx = siblings.findIndex(s => s.id === id);
+    if (sibIdx < 0) return false;
+    if (direction === -1 && sibIdx === 0) return false;
+    if (direction === 1 && sibIdx === siblings.length - 1) return false;
+
+    const swapSibling = siblings[sibIdx + direction];
+
+    // Collect the node + its descendants (contiguous block in the array)
+    const movingIds = new Set([id, ...getDescendantIds(id)]);
+    const movingNodes = nodes.filter(n => movingIds.has(n.id));
+    const rest = nodes.filter(n => !movingIds.has(n.id));
+
+    // Find where the swap sibling's block starts/ends in the rest array
+    const swapIds = new Set([swapSibling.id, ...getDescendantIds(swapSibling.id)]);
+    const swapStart = rest.findIndex(n => n.id === swapSibling.id);
+    let swapEnd = swapStart;
+    while (swapEnd < rest.length && swapIds.has(rest[swapEnd].id)) swapEnd++;
+
+    // Insert our block before or after the swap sibling's block
+    const insertAt = direction === -1 ? swapStart : swapEnd;
+    rest.splice(insertAt, 0, ...movingNodes);
+    nodes = rest;
+    save();
+    return true;
   }
 
   function selectNode(id) {
@@ -732,18 +764,28 @@ body {
       }
       case 'ArrowUp': {
         e.preventDefault();
-        const siblings = getSiblings(selectedId);
-        if (siblings.length === 0) return;
-        const idx = siblings.findIndex(s => s.id === selectedId);
-        if (idx > 0) selectNode(siblings[idx - 1].id);
+        if (e.ctrlKey || e.metaKey) {
+          // Move node up among siblings
+          if (moveNodeAmongSiblings(selectedId, -1)) render();
+        } else {
+          const siblings = getSiblings(selectedId);
+          if (siblings.length === 0) return;
+          const idx = siblings.findIndex(s => s.id === selectedId);
+          if (idx > 0) selectNode(siblings[idx - 1].id);
+        }
         break;
       }
       case 'ArrowDown': {
         e.preventDefault();
-        const siblings2 = getSiblings(selectedId);
-        if (siblings2.length === 0) return;
-        const idx2 = siblings2.findIndex(s => s.id === selectedId);
-        if (idx2 < siblings2.length - 1) selectNode(siblings2[idx2 + 1].id);
+        if (e.ctrlKey || e.metaKey) {
+          // Move node down among siblings
+          if (moveNodeAmongSiblings(selectedId, 1)) render();
+        } else {
+          const siblings2 = getSiblings(selectedId);
+          if (siblings2.length === 0) return;
+          const idx2 = siblings2.findIndex(s => s.id === selectedId);
+          if (idx2 < siblings2.length - 1) selectNode(siblings2[idx2 + 1].id);
+        }
         break;
       }
       case 'ArrowLeft': {
