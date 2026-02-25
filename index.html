@@ -85,7 +85,7 @@ body {
   padding: 6px 10px;
   font-size: 13px;
   min-width: 120px;
-  max-width: 180px;
+  max-width: 400px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -195,7 +195,6 @@ body {
   // ── Constants ──
   const NODE_HEIGHT = 36;
   const NODE_GAP = 8;
-  const LEVEL_SPACING = 200;
   const PADDING_LEFT = 40;
   const PADDING_TOP = 40;
   const ICONS = { question: '❓', idea: '💡', pro: '✅', con: '❌' };
@@ -279,6 +278,25 @@ body {
     return false;
   }
 
+  // ── Text measurement ──
+  const measureCtx = document.createElement('canvas').getContext('2d');
+  const BODY_FONT = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  measureCtx.font = BODY_FONT;
+
+  const nodeWidthCache = {};
+  function measureNodeWidth(node) {
+    if (nodeWidthCache[node.id]) return nodeWidthCache[node.id];
+    const tw = measureCtx.measureText(node.text).width;
+    // 4(border) + 10(padL) + 14(icon) + 6(gap) + text + 6(gap) + add-btn(~18) + 10(padR)
+    const w = Math.max(120, Math.min(400, tw + 68));
+    nodeWidthCache[node.id] = w;
+    return w;
+  }
+
+  function invalidateWidthCache() {
+    for (const key in nodeWidthCache) delete nodeWidthCache[key];
+  }
+
   // ── Layout ──
   function computeSubtreeHeight(id) {
     const children = getVisibleChildren(id);
@@ -292,17 +310,20 @@ body {
   }
 
   function layoutTree(id, x, y) {
+    const node = getNode(id);
     const children = getVisibleChildren(id);
     const subtreeH = computeSubtreeHeight(id);
     const nodeY = y + subtreeH / 2 - NODE_HEIGHT / 2;
+    const nodeW = measureNodeWidth(node);
 
-    layoutMap[id] = { x: x, y: nodeY, width: 0, height: NODE_HEIGHT };
+    layoutMap[id] = { x: x, y: nodeY, width: nodeW, height: NODE_HEIGHT };
 
     if (children.length > 0) {
+      const childX = x + nodeW + 40;
       let childY = y;
       for (let i = 0; i < children.length; i++) {
         const childH = computeSubtreeHeight(children[i].id);
-        layoutTree(children[i].id, x + LEVEL_SPACING, childY);
+        layoutTree(children[i].id, childX, childY);
         childY += childH + NODE_GAP;
       }
     }
@@ -323,6 +344,7 @@ body {
 
     // Layout
     layoutMap = {};
+    invalidateWidthCache();
     layoutTree(root.id, PADDING_LEFT, PADDING_TOP);
 
     // Clear and rebuild
@@ -344,7 +366,7 @@ body {
       for (const child of visChildren) {
         const cpos = layoutMap[child.id];
         if (!cpos) continue;
-        const x1 = pos.x + LEVEL_SPACING - 30;
+        const x1 = pos.x + pos.width;
         const y1 = pos.y + NODE_HEIGHT / 2;
         const x2 = cpos.x;
         const y2 = cpos.y + NODE_HEIGHT / 2;
@@ -479,7 +501,7 @@ body {
     const pos = layoutMap[nodeId];
     if (pos) {
       const rect = canvas.getBoundingClientRect();
-      const px = (pos.x + 170) * zoom + panX + rect.left;
+      const px = (pos.x + pos.width + 8) * zoom + panX + rect.left;
       const py = (pos.y) * zoom + panY + rect.top;
       typePicker.style.left = px + 'px';
       typePicker.style.top = py + 'px';
@@ -797,26 +819,19 @@ body {
 
     // Ensure layout is fresh
     layoutMap = {};
+    invalidateWidthCache();
     layoutTree(root.id, PADDING_LEFT, PADDING_TOP);
 
-    // Measure text widths for accurate card sizing
-    const measure = document.createElement('canvas').getContext('2d');
-    const bodyFont = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    measure.font = bodyFont;
+    const bodyFont = BODY_FONT;
 
-    const nodeWidths = {};
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
     for (const node of nodes) {
       const pos = layoutMap[node.id];
       if (!pos) continue;
-      const tw = measure.measureText(node.text).width;
-      // 4(border) + 10(padL) + 14(icon) + 6(gap) + text + 10(padR)
-      const w = Math.min(Math.max(120, tw + 44), 180);
-      nodeWidths[node.id] = w;
       minX = Math.min(minX, pos.x);
       minY = Math.min(minY, pos.y);
-      maxX = Math.max(maxX, pos.x + w);
+      maxX = Math.max(maxX, pos.x + pos.width);
       maxY = Math.max(maxY, pos.y + NODE_HEIGHT);
     }
 
@@ -847,7 +862,7 @@ body {
       for (const child of vc) {
         const cp = layoutMap[child.id];
         if (!cp) continue;
-        const x1 = pos.x + ox + LEVEL_SPACING - 30;
+        const x1 = pos.x + ox + pos.width;
         const y1 = pos.y + oy + NODE_HEIGHT / 2;
         const x2 = cp.x + ox;
         const y2 = cp.y + oy + NODE_HEIGHT / 2;
@@ -866,7 +881,7 @@ body {
       if (!pos) continue;
       const x = pos.x + ox;
       const y = pos.y + oy;
-      const w = nodeWidths[nd.id];
+      const w = pos.width;
       const h = NODE_HEIGHT;
 
       // Shadow + card background
